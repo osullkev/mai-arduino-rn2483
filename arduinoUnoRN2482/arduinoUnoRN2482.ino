@@ -105,14 +105,15 @@ void initialize_radio()
 
 }
 
-void transmitMessage(String opcode,String seqNum, String len, String data)
+void transmitMessage(String opcode,String seqNum, String data, bool ack)
 {
 
-  String payload = opcode + seqNum + len + data;
+  String payload = opcode + seqNum + "000" + data;
+  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
   
   Serial.println("Transmitting: " + payload);
   
-  switch(myLora.txCommand("mac tx uncnf 1 ", payload, false)) //blocking function
+  switch(myLora.txCommand(command, payload, false)) //blocking function
     {
       case TX_FAIL:
       {
@@ -139,20 +140,54 @@ void transmitMessage(String opcode,String seqNum, String len, String data)
     }  
 }
 
+void transmitSensorReadings(String seqNum, bool ack){
+  String opcode = ack ? "2" : "1";
+  String data = "331E441E55";  
+  transmitMessage(opcode, seqNum, data, ack);
+}
+
+void transmitNodeStatus(String seqNum, bool ack){
+  String opcode = "3";
+  String data = "0105071e22";  
+  transmitMessage(opcode, seqNum, data, ack);  
+}
+
+String padWithZeros(String s, int l)
+{  
+  Serial.println("s:" + s + " " + s.length());
+  while (s.length() < l){
+     s = "0" + s;
+  }
+  return s;
+}
+
+int seqNum = 1;
 // the loop routine runs over and over again forever:
 void loop()
 {
     led_on();
 
-    String opcode = "2";
-    String seqNum = "0001";
-    String len = "000";
-    String data = "331E441E55";
-
-    transmitMessage(opcode, seqNum, len, data);    
+    transmitSensorReadings(padWithZeros(String(seqNum), 4), false);
 
     led_off();
-    delay(20000);
+    Serial.println("Transmitting again in ...");
+    Serial.println("15...");
+    delay(5000);
+    Serial.println("10...");
+    delay(5000);
+    Serial.println("5...");
+    delay(5000);
+    seqNum++;    
+}
+
+void txCountDown(int t){
+  Serial.println("Transmitting again in ...");
+  while(t > 0)
+  {
+    Serial.println(t + "...");
+    delay(5000);
+    t = t - 5000;
+  }
 }
 
 void led_on()
