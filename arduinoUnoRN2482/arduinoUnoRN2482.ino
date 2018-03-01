@@ -91,7 +91,7 @@ void initialize_radio()
   String appKey = "Insert APP KEY";
 
   join_result = myLora.initOTAA(appEUI, appKey);
-
+boo
   while(!join_result)
   {
     Serial.println("Unable to join. Are your keys correct, and do you have TTN coverage?");
