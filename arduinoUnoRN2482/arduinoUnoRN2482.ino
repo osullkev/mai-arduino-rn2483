@@ -46,8 +46,9 @@ void setup()
 
   initialize_radio();
 
+  String nodeStatus = "300051110105071e22"; //FW: Up to Date; Batter: 22%
   //transmit a startup message
-  myLora.tx("TTN Mapper on TTN Enschede node");
+  myLora.txCommand("mac tx uncnf 1 ", nodeStatus, false);
 
   led_off();
   delay(2000);
@@ -84,34 +85,32 @@ void initialize_radio()
   Serial.println(myLora.sysver());
 
   //configure your keys and join the network
-  Serial.println("Trying to join TTN");
+  Serial.println("Trying to join Network");
   bool join_result = false;
 
-  String appEUI = "Insert APP EUI"; 
-  String appKey = "Insert APP KEY";
-
+  String appEUI = "0011223344556677"; // Insert APP EUI; 
+  String appKey = "6a4e6a045f41bfea6ff752cb176c737f"; // Insert APP KEY;
+ 
   join_result = myLora.initOTAA(appEUI, appKey);
-boo
+  
   while(!join_result)
   {
-    Serial.println("Unable to join. Are your keys correct, and do you have TTN coverage?");
+    Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
     delay(60000); //delay a minute before retry
     join_result = myLora.init();
   }
-  Serial.println("Successfully joined TTN");
+  Serial.println("Successfully joined Network");
 
 }
 
-// the loop routine runs over and over again forever:
-void loop()
+void transmitMessage(String opcode,String seqNum, String len, String data)
 {
-    led_on();
 
-    String payload = "20001111331E441E55";
-    Serial.println("Transmitting: " + payload);
-
-//    switch(myLora.txCnf("!")) //one byte, blocking function
-    switch(myLora.txCommand("mac tx uncnf 1 ", payload, false)) //one byte, blocking function
+  String payload = opcode + seqNum + len + data;
+  
+  Serial.println("Transmitting: " + payload);
+  
+  switch(myLora.txCommand("mac tx uncnf 1 ", payload, false)) //blocking function
     {
       case TX_FAIL:
       {
@@ -135,7 +134,20 @@ void loop()
       {
         Serial.println("Unknown response from TX function");
       }
-    }
+    }  
+}
+
+// the loop routine runs over and over again forever:
+void loop()
+{
+    led_on();
+
+    String opcode = "2";
+    String seqNum = "0001";
+    String len = "000";
+    String data = "331E441E55";
+
+    transmitMessage(opcode, seqNum, len, data);    
 
     led_off();
     delay(20000);
