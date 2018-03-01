@@ -25,12 +25,14 @@
  */
 #include <maiRN2xx3.h>
 #include <SoftwareSerial.h>
+#include "networkDetails.h"
 
 SoftwareSerial mySerial(10, 11); // RX, TX
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
 maiRN2xx3 myLora(mySerial);
+networkDetails network("Network Name");
 
 // the setup routine runs once when you press reset:
 void setup()
@@ -88,8 +90,8 @@ void initialize_radio()
   Serial.println("Trying to join Network");
   bool join_result = false;
 
-  String appEUI = "0011223344556677"; // Insert APP EUI; 
-  String appKey = "6a4e6a045f41bfea6ff752cb176c737f"; // Insert APP KEY;
+  String appEUI = network.getAppEUI(); // Insert APP EUI; 
+  String appKey = network.getAppKey(); // Insert APP KEY;
  
   join_result = myLora.initOTAA(appEUI, appKey);
   
