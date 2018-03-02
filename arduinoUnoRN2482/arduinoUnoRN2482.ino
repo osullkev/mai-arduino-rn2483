@@ -29,9 +29,7 @@
 
 SoftwareSerial mySerial(10, 11); // RX, TX
 const int buttonPin = 2;     // the number of the pushbutton pin
-int seqNum = 1;
-
-bool buttonPressed = false;
+int seqNum = 0;
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
@@ -40,17 +38,11 @@ maiRN2xx3 myLora(mySerial);
 // the setup routine runs once when you press reset:
 void setup()
 {
-  //output LED pin
-  pinMode(13, OUTPUT);
-  led_on();
-
   // Open serial communications and wait for port to open:
   Serial.begin(57600); //serial port to computer
   mySerial.begin(9600); //serial port to radio
 
   initialize_radio();
-
-  led_off();
   delay(2000);
 }
 
@@ -89,14 +81,10 @@ void initialize_radio()
   Serial.println("Trying to join Network");
   bool join_result = false;
 
-  String appEUI = network.getAppEUI(); 
-  String appKey = network.getAppKey(); 
-
-  Serial.println(appEUI + ", " + appKey);
   int i = 1;
   Serial.println("Join Attempt: " + String(i));
  
-  join_result = myLora.initOTAA(appEUI, appKey);
+  join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
 
   while(!join_result)
   {
@@ -105,11 +93,54 @@ void initialize_radio()
     Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
     countDown(15000, "Trying to join again in ...");
     Serial.println("Join Attempt: " + String(i));
-    join_result = myLora.initOTAA(appEUI, appKey);
+    join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
   }
   Serial.println("Successfully joined Network");
 
 }
+
+bool nodeStatusButton(unsigned long startTime){
+  Serial.println("5 seconds to press button");
+  while(millis() - startTime < 5000)
+  {
+    if (digitalRead(buttonPin) == HIGH)
+    {
+      return true;
+    }    
+  }
+  return false;  
+}
+
+// the loop routine runs over and over again forever:
+void loop()
+{
+    unsigned long startTime = millis();
+    bool buttonPressed = false;
+    
+    buttonPressed = nodeStatusButton(millis());
+    
+    if (buttonPressed)
+    {
+      Serial.println("Button pressed");
+      transmitNodeStatus(false);
+
+    }else{
+      Serial.println("Button not pressed");
+      transmitSensorReadings(false);
+    }
+    countDown(10000, "Transmitting again in ...");
+}
+
+void countDown(unsigned long t, String m){
+  Serial.println(m);
+  while(t > 0)
+  {
+    Serial.println(String(t/1000) + "...");
+    t = t - 5000;
+    delay(5000);
+  }
+}
+
 
 String getNextSeqNum()
 {
@@ -119,12 +150,8 @@ String getNextSeqNum()
 
 void transmitMessage(String opcode, String data, bool ack)
 {
-
-  String seqNum = getNextSeqNum();
-  String payload = opcode + seqNum + "000" + data;
+  String payload = opcode + getNextSeqNum() + "000" + data;
   String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
-  Serial.println("Command: " + command);
-
   Serial.println("Transmitting: " + payload);
 
   switch(myLora.txCommand(command, payload, false)) //blocking function
@@ -143,8 +170,6 @@ void transmitMessage(String opcode, String data, bool ack)
       {
         String received = myLora.getRx();
         Serial.println("Received downlink (hex): " + received);
-//        received = myLora.base16decode(received);
-//        Serial.print("Received downlink: " + received);
         break;
       }
       default:
@@ -178,55 +203,5 @@ String padWithZeros(String s, int l)
 void logRN2483Response()
 {
   Serial.println("RN2483: " + myLora.getRN2483Response());
-}
-
-// the loop routine runs over and over again forever:
-void loop()
-{
-    led_on();
-    unsigned long startTime = millis();
-    Serial.println("5 seconds to press button");
-    while(millis() - startTime < 5000)
-    {
-      if (digitalRead(buttonPin) == HIGH)
-      {
-        buttonPressed = true;
-        break;
-      }    
-    }
-    if (buttonPressed)
-    {
-      Serial.println("Button pressed");
-      transmitNodeStatus(false);
-
-    }else{
-      Serial.println("Button not pressed");
-      transmitSensorReadings(false);
-    }
-
-    led_off();
-
-    countDown(10000, "Transmitting again in ...");
-    buttonPressed = false;
-}
-
-void countDown(unsigned long t, String m){
-  Serial.println(m);
-  while(t > 0)
-  {
-    Serial.println(String(t/1000) + "...");
-    t = t - 5000;
-    delay(5000);
-  }
-}
-
-void led_on()
-{
-  digitalWrite(13, 1);
-}
-
-void led_off()
-{
-  digitalWrite(13, 0);
 }
 
