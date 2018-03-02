@@ -1,4 +1,4 @@
-/*
+ /*
  * CHECK THE RULES BEFORE USING THIS PROGRAM!
  *
  * CHANGE ADDRESS!
@@ -28,11 +28,15 @@
 #include "networkDetails.h"
 
 SoftwareSerial mySerial(10, 11); // RX, TX
+const int buttonPin = 2;     // the number of the pushbutton pin
+int seqNum = 1;
+
+bool buttonPressed = false;
+
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
 maiRN2xx3 myLora(mySerial);
-networkDetails network("Network Name");
 
 // the setup routine runs once when you press reset:
 void setup()
@@ -44,13 +48,8 @@ void setup()
   // Open serial communications and wait for port to open:
   Serial.begin(57600); //serial port to computer
   mySerial.begin(9600); //serial port to radio
-  Serial.println("Startup");
 
   initialize_radio();
-
-  String nodeStatus = "300051110105071e22"; //FW: Up to Date; Batter: 22%
-  //transmit a startup message
-  myLora.txCommand("mac tx uncnf 1 ", nodeStatus, false);
 
   led_off();
   delay(2000);
@@ -58,6 +57,7 @@ void setup()
 
 void initialize_radio()
 {
+  networkDetails network("Network Name");
   //reset rn2483
   pinMode(12, OUTPUT);
   digitalWrite(12, LOW);
@@ -90,15 +90,22 @@ void initialize_radio()
   Serial.println("Trying to join Network");
   bool join_result = false;
 
-  String appEUI = network.getAppEUI(); // Insert APP EUI; 
-  String appKey = network.getAppKey(); // Insert APP KEY;
+  String appEUI = network.getAppEUI(); 
+  String appKey = network.getAppKey(); 
+
+  Serial.println(appEUI + ", " + appKey);
+  int i = 1;
+  Serial.println("Join Attempt: " + String(i));
  
   join_result = myLora.initOTAA(appEUI, appKey);
-  
+
   while(!join_result)
   {
+    logRN2483Response();
+    i++;
     Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
-    delay(60000); //delay a minute before retry
+    countDown(15000, "Trying to join again in ...");
+    Serial.println("Join Attempt: " + String(i));
     join_result = myLora.init();
   }
   Serial.println("Successfully joined Network");
@@ -110,9 +117,10 @@ void transmitMessage(String opcode,String seqNum, String data, bool ack)
 
   String payload = opcode + seqNum + "000" + data;
   String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
-  
+  Serial.println("Command: " + command);
+
   Serial.println("Transmitting: " + payload);
-  
+
   switch(myLora.txCommand(command, payload, false)) //blocking function
     {
       case TX_FAIL:
@@ -137,7 +145,8 @@ void transmitMessage(String opcode,String seqNum, String data, bool ack)
       {
         Serial.println("Unknown response from TX function");
       }
-    }  
+    }
+    logRN2483Response();
 }
 
 void transmitSensorReadings(String seqNum, bool ack){
@@ -154,39 +163,55 @@ void transmitNodeStatus(String seqNum, bool ack){
 
 String padWithZeros(String s, int l)
 {  
-  Serial.println("s:" + s + " " + s.length());
   while (s.length() < l){
      s = "0" + s;
   }
   return s;
 }
 
-int seqNum = 1;
+void logRN2483Response()
+{
+  Serial.println("RN2483: " + myLora.getRN2483Response());
+}
+
 // the loop routine runs over and over again forever:
 void loop()
 {
     led_on();
+    unsigned long startTime = millis();
+
+    while(millis() - startTime < 5000)
+    {
+      if (digitalRead(buttonPin) == HIGH)
+      {
+        Serial.println("Button pressed");
+        buttonPressed = true;
+        break;
+      }    
+    }
+
+    if (buttonPressed)
+    {
+      Serial.println("Button pressed");
+    }else{
+      Serial.println("Button not pressed");
+    }
 
     transmitSensorReadings(padWithZeros(String(seqNum), 4), false);
 
     led_off();
-    Serial.println("Transmitting again in ...");
-    Serial.println("15...");
-    delay(5000);
-    Serial.println("10...");
-    delay(5000);
-    Serial.println("5...");
-    delay(5000);
+
+    countDown(30000, "Transmitting again in ...");
     seqNum++;    
 }
 
-void txCountDown(int t){
-  Serial.println("Transmitting again in ...");
+void countDown(unsigned long t, String m){
+  Serial.println(m);
   while(t > 0)
   {
-    Serial.println(t + "...");
-    delay(5000);
+    Serial.println(String(t/1000) + "...");
     t = t - 5000;
+    delay(5000);
   }
 }
 
