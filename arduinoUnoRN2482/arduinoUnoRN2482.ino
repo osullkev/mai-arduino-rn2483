@@ -33,7 +33,6 @@ int seqNum = 1;
 
 bool buttonPressed = false;
 
-
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
 maiRN2xx3 myLora(mySerial);
@@ -106,15 +105,22 @@ void initialize_radio()
     Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
     countDown(15000, "Trying to join again in ...");
     Serial.println("Join Attempt: " + String(i));
-    join_result = myLora.init();
+    join_result = myLora.initOTAA(appEUI, appKey);
   }
   Serial.println("Successfully joined Network");
 
 }
 
-void transmitMessage(String opcode,String seqNum, String data, bool ack)
+String getNextSeqNum()
+{
+  seqNum++;
+  return padWithZeros(String(seqNum, HEX), 4);
+}
+
+void transmitMessage(String opcode, String data, bool ack)
 {
 
+  String seqNum = getNextSeqNum();
   String payload = opcode + seqNum + "000" + data;
   String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
   Serial.println("Command: " + command);
@@ -149,16 +155,16 @@ void transmitMessage(String opcode,String seqNum, String data, bool ack)
     logRN2483Response();
 }
 
-void transmitSensorReadings(String seqNum, bool ack){
+void transmitSensorReadings(bool ack){
   String opcode = ack ? "2" : "1";
   String data = "331E441E55";  
-  transmitMessage(opcode, seqNum, data, ack);
+  transmitMessage(opcode, data, ack);
 }
 
-void transmitNodeStatus(String seqNum, bool ack){
+void transmitNodeStatus(bool ack){
   String opcode = "3";
   String data = "0105071e22";  
-  transmitMessage(opcode, seqNum, data, ack);  
+  transmitMessage(opcode, data, ack);  
 }
 
 String padWithZeros(String s, int l)
@@ -179,30 +185,29 @@ void loop()
 {
     led_on();
     unsigned long startTime = millis();
-
+    Serial.println("5 seconds to press button");
     while(millis() - startTime < 5000)
     {
       if (digitalRead(buttonPin) == HIGH)
       {
-        Serial.println("Button pressed");
         buttonPressed = true;
         break;
       }    
     }
-
     if (buttonPressed)
     {
       Serial.println("Button pressed");
+      transmitNodeStatus(false);
+
     }else{
       Serial.println("Button not pressed");
+      transmitSensorReadings(false);
     }
-
-    transmitSensorReadings(padWithZeros(String(seqNum), 4), false);
 
     led_off();
 
-    countDown(30000, "Transmitting again in ...");
-    seqNum++;    
+    countDown(10000, "Transmitting again in ...");
+    buttonPressed = false;
 }
 
 void countDown(unsigned long t, String m){
