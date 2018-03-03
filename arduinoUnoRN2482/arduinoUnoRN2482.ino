@@ -91,10 +91,11 @@ void initialize_radio()
     logRN2483Response();
     i++;
     Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
-    countDown(15000, "Trying to join again in ...");
+    countDown(30000, "Trying to join again in ...");
     Serial.println("Join Attempt: " + String(i));
-    join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
+    join_result = myLora.joinOTAA();
   }
+  logRN2483Response();
   Serial.println("Successfully joined Network");
 
 }
@@ -170,6 +171,11 @@ void transmitMessage(String opcode, String data, bool ack)
       {
         String received = myLora.getRx();
         Serial.println("Received downlink (hex): " + received);
+        break;
+      }
+      case TX_NOT_JOINED:
+      {
+        Serial.println("Not Joined ...");
         break;
       }
       default:
