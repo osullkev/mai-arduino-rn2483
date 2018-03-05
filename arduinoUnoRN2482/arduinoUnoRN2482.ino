@@ -86,12 +86,14 @@ void initialize_radio()
  
   join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
 
+//  join_result = true;
+  
   while(!join_result)
   {
     logRN2483Response();
     i++;
     Serial.println("Unable to join. Are your keys correct, and do you have Network coverage?");
-    countDown(30000, "Trying to join again in ...");
+    countDown(60000, "Trying to join again in ...");
     Serial.println("Join Attempt: " + String(i));
     join_result = myLora.joinOTAA();
   }
@@ -100,36 +102,49 @@ void initialize_radio()
 
 }
 
-bool nodeStatusButton(unsigned long startTime){
-  Serial.println("5 seconds to press button");
-  while(millis() - startTime < 5000)
-  {
-    if (digitalRead(buttonPin) == HIGH)
-    {
-      return true;
-    }    
-  }
-  return false;  
-}
-
 // the loop routine runs over and over again forever:
 void loop()
 {
     unsigned long startTime = millis();
     bool buttonPressed = false;
-    
-    buttonPressed = nodeStatusButton(millis());
-    
-    if (buttonPressed)
+        
+    if (nodeStatusButton(millis(), "Node Status Update"))
     {
-      Serial.println("Button pressed");
-      transmitNodeStatus(false);
-
-    }else{
-      Serial.println("Button not pressed");
-      transmitSensorReadings(false);
+      delay(2000);
+      if (nodeStatusButton(millis(), "Node Status Update WITH OUT-OF-DATE FW"))                                                                                                                                                                  
+      {
+        transmitNodeStatusOUTOFDATE(false);
+      }
+      else
+      {
+        transmitNodeStatus(false);
+      }
     }
-    countDown(10000, "Transmitting again in ...");
+    else{
+      if (nodeStatusButton(millis(), "Sensor Readings Ack Expected"))
+      {
+        transmitSensorReadings(true);
+        
+      }else 
+      {
+        transmitSensorReadings(false);
+      }
+    }
+    countDown(30000, "Transmitting again in ...");
+}
+
+bool nodeStatusButton(unsigned long startTime, String message){
+  Serial.print("Press button in 5 seconds: " + message);
+  while(millis() - startTime < 5000)
+  {
+    if (digitalRead(buttonPin) == HIGH)
+    {
+      Serial.println(" - Button Pressed");
+      return true;
+    }    
+  }
+  Serial.println(" - Time Expired");
+  return false;  
 }
 
 void countDown(unsigned long t, String m){
@@ -152,7 +167,8 @@ String getNextSeqNum()
 void transmitMessage(String opcode, String data, bool ack)
 {
   String payload = opcode + getNextSeqNum() + "000" + data;
-  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
+//  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
+  String command = "mac tx uncnf 1 ";
   Serial.println("Transmitting: " + payload);
 
   switch(myLora.txCommand(command, payload, false)) //blocking function
@@ -170,7 +186,8 @@ void transmitMessage(String opcode, String data, bool ack)
       case TX_WITH_RX:
       {
         String received = myLora.getRx();
-        Serial.println("Received downlink (hex): " + received);
+        Serial.println("Received downlink (hex): ");
+        Serial.println(received);
         break;
       }
       case TX_NOT_JOINED:
@@ -195,6 +212,12 @@ void transmitSensorReadings(bool ack){
 void transmitNodeStatus(bool ack){
   String opcode = "3";
   String data = "0105071e22";  
+  transmitMessage(opcode, data, ack);  
+}
+
+void transmitNodeStatusOUTOFDATE(bool ack){
+  String opcode = "3";
+  String data = "0105061e22";  
   transmitMessage(opcode, data, ack);  
 }
 
