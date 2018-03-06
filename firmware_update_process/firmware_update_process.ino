@@ -35,6 +35,8 @@ int seqNum = 0;
 //giving the software serial as port to use
 maiRN2xx3 myLora(mySerial);
 
+bool responseReceived = false;
+
 // the setup routine runs once when you press reset:
 void setup()
 {
@@ -42,7 +44,7 @@ void setup()
   Serial.begin(57600); //serial port to computer
   mySerial.begin(9600); //serial port to radio
 
-  Serial.println("This test only sends uplink of opcode=2, i.e uplinks which expect a response from the server");
+  Serial.println("This test only sends uplink of opcode=3,4,5,6, i.e uplinks involved in the FW update process.");
   Serial.println("-------------------------------------------------");
 
 
@@ -90,8 +92,6 @@ void initialize_radio()
  
   join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
 
-//  join_result = true;
-  
   while(!join_result)
   {
     logRN2483Response();
@@ -103,47 +103,52 @@ void initialize_radio()
   }
   logRN2483Response();
   Serial.println("Successfully joined Network");
+  delay(5000);
 
 }
 
-//////////////////////////////////////////
-//////////     MAIN LOOP      ////////////
-//////////////////////////////////////////
-
 void loop()
 {
-    transmitNodeStatusOUTOFDATE(true);
+    nodeStatusUpdate();
     
     countDown(30000, "Transmitting again in ...");
 }
 
 void nodeStatusUpdate()
 {
-  
-}
+  int attemptNum = 1;
 
-//////////////////////////////////////////
-////////// UPLINK ASSEMBLERS  ////////////
-//////////////////////////////////////////
+  Serial.println("Node Status Attempt: " + String(attemptNum));
+
+  transmitNodeStatusOUTOFDATE(true);
+
+
+  while(!responseReceived)
+  {
+    countDown(30000, "Transmitting node status again in ..." );
+    attemptNum++;
+    Serial.println("Node Status Attempt: " + String(attemptNum));
+
+
+    transmitNodeStatusOUTOFDATE(true);
+
+  }
+  countDown(30000, "Response received ...");  
+  responseReceived = false;
+}
 
 void transmitNodeStatusOUTOFDATE(bool ack){
   transmitMessage("3", "0105061e22", ack);  
 }
 
-//////////////////////////////////////////
-//////////  TX/RX HANDLING    ////////////
-//////////////////////////////////////////
-
-bool transmitMessage(String opcode, String data, bool ack)
+void transmitMessage(String opcode, String data, bool ack)
 {
   String payload = opcode + getNextSeqNum() + "000" + data;
 //  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
   char command[] = "mac tx uncnf 1 ";
   Serial.println("Transmitting: " + payload);
-  int result = myLora.txCommand(command, payload, false)
 
-  logRN2483Response();
-
+  responseReceived = false;
 
   switch(myLora.txCommand(command, payload, false)) //blocking function
     {
@@ -162,7 +167,7 @@ bool transmitMessage(String opcode, String data, bool ack)
         String received = myLora.getRx();
         Serial.println("Received downlink (hex): ");
         Serial.println(received);
-        handleDownlink(received);
+        responseReceived = true;        
         break;
       }
       case TX_NOT_JOINED:
@@ -175,11 +180,9 @@ bool transmitMessage(String opcode, String data, bool ack)
         Serial.println("Unknown response from TX function");
       }
     }
-}
 
-//////////////////////////////////////////
-//////////  UTILITY FUNCTIONS ////////////
-//////////////////////////////////////////
+    logRN2483Response();
+}
 
 void countDown(unsigned long t, String m){
   Serial.println(m);

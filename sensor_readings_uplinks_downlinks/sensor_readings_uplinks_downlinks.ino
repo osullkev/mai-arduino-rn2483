@@ -42,7 +42,7 @@ void setup()
   Serial.begin(57600); //serial port to computer
   mySerial.begin(9600); //serial port to radio
 
-  Serial.println("This test only sends uplink of opcode=2, i.e uplinks which expect a response from the server");
+  
   Serial.println("-------------------------------------------------");
 
 
@@ -89,8 +89,6 @@ void initialize_radio()
   Serial.println("Join Attempt: " + String(i));
  
   join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
-
-//  join_result = true;
   
   while(!join_result)
   {
