@@ -1,3 +1,7 @@
 arduinoUnoRN2482/networkDetails.*
 
 keys.txt
+
+sensor_readings_uplinks_downlink/networkDetails.*
+
+*/networkDetails*

@@ -1,4 +1,4 @@
- /*
+/*
  * CHECK THE RULES BEFORE USING THIS PROGRAM!
  *
  * CHANGE ADDRESS!
@@ -188,6 +188,7 @@ void transmitMessage(String opcode, String data, bool ack)
         String received = myLora.getRx();
         Serial.println("Received downlink (hex): ");
         Serial.println(received);
+        handleDownlink(received);
         break;
       }
       case TX_NOT_JOINED:
@@ -210,13 +211,13 @@ void transmitSensorReadings(bool ack){
 }
 
 void transmitNodeStatus(bool ack){
-  String opcode = "3";
+  char opcode[] = "3";
   String data = "0105071e22";  
   transmitMessage(opcode, data, ack);  
 }
 
 void transmitNodeStatusOUTOFDATE(bool ack){
-  String opcode = "3";
+  char opcode[] = "3";
   String data = "0105061e22";  
   transmitMessage(opcode, data, ack);  
 }
@@ -232,5 +233,10 @@ String padWithZeros(String s, int l)
 void logRN2483Response()
 {
   Serial.println("RN2483: " + myLora.getRN2483Response());
+}
+
+void handleDownlink(String s)
+{
+  
 }
 
