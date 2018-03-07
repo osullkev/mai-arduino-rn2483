@@ -134,7 +134,7 @@ void nodeStatusUpdate()
     transmitNodeStatusOUTOFDATE(true);
 
   }
-  countDown(30000, "Response received ...");  
+  handleNodeStatusResponse();
   responseReceived = false;
 }
 
@@ -226,5 +226,59 @@ void logRN2483Response()
 {
   Serial.print(F("RN2483: "));
   Serial.println(myLora.getRN2483Response());
+}
+
+void handleNodeStatusResponse()
+{
+  String response = myLora.getRx();
+  char opcode = response.charAt(0);
+  Serial.print(F("Response Opcode: "));
+  Serial.println(opcode);
+
+  switch(opcode)
+  {
+    case '3':
+    {
+      Serial.println(F("Node status update acknowledged - No action required."));
+    }
+    case '4':
+    {
+      requestFirmwareUpdate();
+    }
+    default:
+    {
+      Serial.print(F("Unknown opcode received: "));
+      Serial.println(opcode);
+    }
+  }  
+}
+
+void requestFirmwareUpdate()
+{
+  bool lastPacket = false;
+
+  while(!lastPacket)
+  {
+    countDown(30000, "Requesting next packet in ..." );
+    requestFirmwareUpdatePacket();
+
+    if (responseReceived = true)
+    {
+      lastPacket = handleUpdatePacket();
+    }
+    responseReceived = false;
+  } 
+}
+
+void requestFirmwareUpdatePacket(){  
+  transmitMessage("4", "", false);  
+}
+
+bool handleUpdatePacket() 
+{
+  Serial.print(F("Processing update packet->"));
+  Serial.println(myLora.getRx());
+
+  return false;
 }
 
