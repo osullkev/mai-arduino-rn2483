@@ -44,8 +44,8 @@ void setup()
   Serial.begin(57600); //serial port to computer
   mySerial.begin(9600); //serial port to radio
 
-  Serial.println("This test only sends uplink of opcode=3,4,5,6, i.e uplinks involved in the FW update process.");
-  Serial.println("-------------------------------------------------");
+  Serial.println(F("This test only sends uplink of opcode=3,4,5,6, i.e uplinks involved in the FW update process."));
+  Serial.println(F("-------------------------------------------------"));
 
 
   initialize_radio();
@@ -71,20 +71,20 @@ void initialize_radio()
   String hweui = myLora.hweui();
   while(hweui.length() != 16)
   {
-    Serial.println("Communication with RN2xx3 unsuccesful. Power cycle the board.");
+    Serial.println(F("Communication with RN2xx3 unsuccesful. Power cycle the board."));
     Serial.println(hweui);
     delay(10000);
     hweui = myLora.hweui();
   }
 
   //print out the HWEUI so that we can register it via ttnctl
-  Serial.println("When using OTAA, register this DevEUI: ");
+  Serial.println(F("When using OTAA, register this DevEUI: "));
   Serial.println(myLora.hweui());
-  Serial.println("RN2xx3 firmware version:");
+  Serial.println(F("RN2xx3 firmware version:"));
   Serial.println(myLora.sysver());
 
   //configure your keys and join the network
-  Serial.println("Trying to join Network");
+  Serial.println(F("Trying to join Network"));
   bool join_result = false;
 
   int i = 1;
@@ -127,7 +127,8 @@ void nodeStatusUpdate()
   {
     countDown(30000, "Transmitting node status again in ..." );
     attemptNum++;
-    Serial.println("Node Status Attempt: " + String(attemptNum));
+    Serial.print(F("Node Status Attempt: "));
+    Serial.println(String(attemptNum));
 
 
     transmitNodeStatusOUTOFDATE(true);
@@ -154,30 +155,38 @@ void transmitMessage(String opcode, String data, bool ack)
     {
       case TX_FAIL:
       {
-        Serial.println("Transmission UNSUCESSFUL or NOT acknowledged");
+        Serial.println(F("Transmission UNSUCESSFUL or NOT acknowledged"));
         break;
       }
       case TX_SUCCESS:
       {
-        Serial.println("Transmission SUCCESSFUL and acknowledged");
+        Serial.println(F("Transmission SUCCESSFUL and acknowledged"));
+        incrementSeqNum();
         break;
       }
       case TX_WITH_RX:
       {
         String received = myLora.getRx();
-        Serial.println("Received downlink (hex): ");
+        Serial.println(F("Received downlink (hex): "));
         Serial.println(received);
         responseReceived = true;        
+        incrementSeqNum();
+        break;
+      }
+      case TX_MAC_ERR:
+      {
+        Serial.println(F("Problem receiving downlink. Uplink may have been successful."));
+        incrementSeqNum();
         break;
       }
       case TX_NOT_JOINED:
       {
-        Serial.println("Not Joined ...");
+        Serial.println(F("Not Joined ..."));
         break;
       }
       default:
       {
-        Serial.println("Unknown response from TX function");
+        Serial.println(F("Unknown response from TX function"));
       }
     }
 
@@ -188,15 +197,20 @@ void countDown(unsigned long t, String m){
   Serial.println(m);
   while(t > 0)
   {
-    Serial.println(String(t/1000) + "...");
+    Serial.print(String(t/1000));
+    Serial.println(F("..."));
     t = t - 5000;
     delay(5000);
   }
 }
 
-String getNextSeqNum()
+void incrementSeqNum()
 {
   seqNum++;
+}
+
+String getNextSeqNum()
+{
   return padWithZeros(String(seqNum, HEX), 4);
 }
 
@@ -210,6 +224,7 @@ String padWithZeros(String s, int l)
 
 void logRN2483Response()
 {
-  Serial.println("RN2483: " + myLora.getRN2483Response());
+  Serial.print(F("RN2483: "));
+  Serial.println(myLora.getRN2483Response());
 }
 
