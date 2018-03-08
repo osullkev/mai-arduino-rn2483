@@ -29,28 +29,253 @@
 
 SoftwareSerial mySerial(10, 11); // RX, TX
 const int buttonPin = 2;     // the number of the pushbutton pin
-int seqNum = 0;
+int seqNum = 1;
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
 maiRN2xx3 myLora(mySerial);
 
-bool responseReceived = false;
+int state = 1; // See technical diagrams
 
 // the setup routine runs once when you press reset:
 void setup()
 {
-    // Open serial communications and wait for port to open:
-  Serial.begin(57600); //serial port to computer
+  // Open serial communications and wait for port to open:
+  Serial.begin(57600);  //serial port to computer
   mySerial.begin(9600); //serial port to radio
 
   Serial.println(F("This test only sends uplink of opcode=3,4,5,6, i.e uplinks involved in the FW update process."));
   Serial.println(F("-------------------------------------------------"));
 
-
   initialize_radio();
+  
   delay(2000);
 }
+
+void loop()
+{
+    stateMachine();
+    
+    countDown(30000, "Updating state in ...");
+}
+
+////////////////////////////////////////////////////////
+/////////////     NODE STATUS UPDATE       /////////////
+////////////////////////////////////////////////////////
+
+void stateMachine()
+{
+  switch(state)
+  {
+    case 0:
+    {
+      Serial.println(F("In idle state = 0"));
+      break;      
+    }
+    case 1:
+    {
+      Serial.println(F("Scheduled Node Status Update - In state = 1"));
+      transmitNodeStatus();      
+      break;
+    }
+    case 2:
+    {
+      Serial.println(F("Requesting firmware update packet - In state = 2"));     
+      requestFirmwareUpdatePacket();      
+      break;
+    }
+    case 3:
+    {
+      Serial.println(F("Checking for missing firmware update packets - In state = 3"));  
+      break;    
+    }
+    case 4:
+    {
+      Serial.println(F("Updating firmware - In state = 4"));
+      break;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+/////////////     NODE STATUS FUNCTIONS    /////////////
+////////////////////////////////////////////////////////
+
+void transmitNodeStatus()
+{
+  transmitMessage("3", "0105061e22");  // v1.5.6 is out-of-date
+}
+
+////////////////////////////////////////////////////////
+/////////////     FW UPDATE FUNCTIONS      /////////////
+////////////////////////////////////////////////////////
+
+void requestFirmwareUpdatePacket(){  
+  transmitMessage("4", "");  
+}
+
+char handleUpdatePacket(String packet) 
+{
+  Serial.print(F("Processing update packet->"));
+  Serial.println(packet);
+
+  return '0';
+}
+
+////////////////////////////////////////////////////////
+/////////////     DOWNLINK HANDLER         /////////////
+////////////////////////////////////////////////////////
+
+void handleDownlink(String response)
+{
+  char opcode = response.charAt(0);
+  Serial.print(F("Response Opcode: "));
+  Serial.println(opcode);
+
+  switch(opcode)
+  {
+    case '2':
+    {
+      state = 0; //Move back to idle state
+      break;
+    }
+    case '3':
+    {
+      state = 0; //Move back to idle state
+      break;
+    }
+    case '4':
+    {
+      state = 2; //Move to Request FW Update Packets State.
+      break;
+    }
+    case '5':
+    {
+      Serial.println(F("Firmware update packet received ..."));
+      char flag = handleUpdatePacket(response);
+      switch (flag)
+      {
+        case '0':
+        {
+          state = 2;      
+          break;
+        }
+        case '1':
+        {
+          state = 3;      
+          break;  
+        }
+        case '2':
+        {
+          Serial.println("Pausing FW Update process");
+          break;
+        }      
+      }
+      break;
+    }
+    default:
+    {
+      Serial.print(F("Unknown opcode received: "));
+      Serial.println(opcode);
+    }
+  }  
+}
+
+
+////////////////////////////////////////////////////////
+/////////////     UPLINK ASSEMBLERS        /////////////
+////////////////////////////////////////////////////////
+
+void transmitMessage(String opcode, String data)
+{
+  String payload = opcode + getNextSeqNum() + "000" + data;
+  char command[] = "mac tx uncnf 1 ";
+  Serial.println("Transmitting: " + payload);
+  
+  switch(myLora.txCommand(command, payload, false)) //blocking function
+    {
+      case TX_FAIL:
+      {
+        Serial.println(F("Transmission UNSUCESSFUL or NOT acknowledged"));
+        break;
+      }
+      case TX_SUCCESS:
+      {
+        Serial.println(F("Transmission SUCCESSFUL and acknowledged"));
+        incrementSeqNum();
+        break;
+      }
+      case TX_WITH_RX:
+      {
+        String received = myLora.getRx();
+        Serial.println(F("Received downlink (hex): "));
+        Serial.println(received);
+        handleDownlink(received);
+        incrementSeqNum();
+        break;
+      }
+      case TX_MAC_ERR:
+      {
+        Serial.println(F("Problem receiving downlink. Uplink may have been successful."));
+        incrementSeqNum();
+        break;
+      }
+      case TX_NOT_JOINED:
+      {
+        Serial.println(F("Not Joined ..."));
+        break;
+      }
+      default:
+      {
+        Serial.println(F("Unknown response from TX function"));
+      }
+    }
+    logRN2483Response();
+}
+
+////////////////////////////////////////////////////////
+/////////////     UTILITY FUNCTIONS        /////////////
+////////////////////////////////////////////////////////
+
+void countDown(unsigned long t, String m){
+  Serial.println(m);
+  while(t > 0)
+  {
+    Serial.print(String(t/1000));
+    Serial.println(F("..."));
+    t = t - 5000;
+    delay(5000);
+  }
+}
+
+void incrementSeqNum()
+{
+  seqNum++;
+}
+
+String getNextSeqNum()
+{
+  return padWithZeros(String(seqNum, HEX), 4);
+}
+
+String padWithZeros(String s, int l)
+{  
+  while (s.length() < l){
+     s = "0" + s;
+  }
+  return s;
+}
+
+void logRN2483Response()
+{
+  Serial.print(F("RN2483: "));
+  Serial.println(myLora.getRN2483Response());
+}
+
+
+////////////////////////////////////////////////////////
+/////////////     JOIN NETWORK - OTAA      /////////////
+////////////////////////////////////////////////////////
 
 void initialize_radio()
 {
@@ -105,180 +330,5 @@ void initialize_radio()
   Serial.println("Successfully joined Network");
   delay(5000);
 
-}
-
-void loop()
-{
-    nodeStatusUpdate();
-    
-    countDown(30000, "Transmitting again in ...");
-}
-
-void nodeStatusUpdate()
-{
-  int attemptNum = 1;
-
-  Serial.println("Node Status Attempt: " + String(attemptNum));
-
-  transmitNodeStatusOUTOFDATE(true);
-
-
-  while(!responseReceived)
-  {
-    countDown(30000, "Transmitting node status again in ..." );
-    attemptNum++;
-    Serial.print(F("Node Status Attempt: "));
-    Serial.println(String(attemptNum));
-
-
-    transmitNodeStatusOUTOFDATE(true);
-
-  }
-  handleNodeStatusResponse();
-  responseReceived = false;
-}
-
-void transmitNodeStatusOUTOFDATE(bool ack){
-  transmitMessage("3", "0105061e22", ack);  
-}
-
-void transmitMessage(String opcode, String data, bool ack)
-{
-  String payload = opcode + getNextSeqNum() + "000" + data;
-//  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
-  char command[] = "mac tx uncnf 1 ";
-  Serial.println("Transmitting: " + payload);
-
-  responseReceived = false;
-
-  switch(myLora.txCommand(command, payload, false)) //blocking function
-    {
-      case TX_FAIL:
-      {
-        Serial.println(F("Transmission UNSUCESSFUL or NOT acknowledged"));
-        break;
-      }
-      case TX_SUCCESS:
-      {
-        Serial.println(F("Transmission SUCCESSFUL and acknowledged"));
-        incrementSeqNum();
-        break;
-      }
-      case TX_WITH_RX:
-      {
-        String received = myLora.getRx();
-        Serial.println(F("Received downlink (hex): "));
-        Serial.println(received);
-        responseReceived = true;        
-        incrementSeqNum();
-        break;
-      }
-      case TX_MAC_ERR:
-      {
-        Serial.println(F("Problem receiving downlink. Uplink may have been successful."));
-        incrementSeqNum();
-        break;
-      }
-      case TX_NOT_JOINED:
-      {
-        Serial.println(F("Not Joined ..."));
-        break;
-      }
-      default:
-      {
-        Serial.println(F("Unknown response from TX function"));
-      }
-    }
-
-    logRN2483Response();
-}
-
-void countDown(unsigned long t, String m){
-  Serial.println(m);
-  while(t > 0)
-  {
-    Serial.print(String(t/1000));
-    Serial.println(F("..."));
-    t = t - 5000;
-    delay(5000);
-  }
-}
-
-void incrementSeqNum()
-{
-  seqNum++;
-}
-
-String getNextSeqNum()
-{
-  return padWithZeros(String(seqNum, HEX), 4);
-}
-
-String padWithZeros(String s, int l)
-{  
-  while (s.length() < l){
-     s = "0" + s;
-  }
-  return s;
-}
-
-void logRN2483Response()
-{
-  Serial.print(F("RN2483: "));
-  Serial.println(myLora.getRN2483Response());
-}
-
-void handleNodeStatusResponse()
-{
-  String response = myLora.getRx();
-  char opcode = response.charAt(0);
-  Serial.print(F("Response Opcode: "));
-  Serial.println(opcode);
-
-  switch(opcode)
-  {
-    case '3':
-    {
-      Serial.println(F("Node status update acknowledged - No action required."));
-    }
-    case '4':
-    {
-      requestFirmwareUpdate();
-    }
-    default:
-    {
-      Serial.print(F("Unknown opcode received: "));
-      Serial.println(opcode);
-    }
-  }  
-}
-
-void requestFirmwareUpdate()
-{
-  bool lastPacket = false;
-
-  while(!lastPacket)
-  {
-    countDown(30000, "Requesting next packet in ..." );
-    requestFirmwareUpdatePacket();
-
-    if (responseReceived = true)
-    {
-      lastPacket = handleUpdatePacket();
-    }
-    responseReceived = false;
-  } 
-}
-
-void requestFirmwareUpdatePacket(){  
-  transmitMessage("4", "", false);  
-}
-
-bool handleUpdatePacket() 
-{
-  Serial.print(F("Processing update packet->"));
-  Serial.println(myLora.getRx());
-
-  return false;
 }
 
