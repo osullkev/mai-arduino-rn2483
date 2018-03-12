@@ -119,7 +119,7 @@ char handleUpdatePacket(String packet)
   Serial.print(F("Processing update packet->"));
   Serial.println(packet);
 
-  return '0';
+  return packet.charAt(0);;
 }
 
 ////////////////////////////////////////////////////////
@@ -129,6 +129,8 @@ char handleUpdatePacket(String packet)
 void handleDownlink(String response)
 {
   char opcode = response.charAt(0);
+  String dlSeqNum = response.substring(1,5);
+  String data = response.substring(8);
   Serial.print(F("Response Opcode: "));
   Serial.println(opcode);
 
@@ -152,7 +154,7 @@ void handleDownlink(String response)
     case '5':
     {
       Serial.println(F("Firmware update packet received ..."));
-      char flag = handleUpdatePacket(response);
+      char flag = handleUpdatePacket(data);
       switch (flag)
       {
         case '0':
@@ -188,7 +190,7 @@ void handleDownlink(String response)
 
 void transmitMessage(String opcode, String data)
 {
-  String payload = opcode + getNextSeqNum() + "000" + data;
+  String payload = opcode + getNextSeqNum() + data;
   char command[] = "mac tx uncnf 1 ";
   Serial.println("Transmitting: " + payload);
   
@@ -255,7 +257,7 @@ void incrementSeqNum()
 
 String getNextSeqNum()
 {
-  return padWithZeros(String(seqNum, HEX), 4);
+  return padWithZeros(String(seqNum, HEX), 3);
 }
 
 String padWithZeros(String s, int l)
