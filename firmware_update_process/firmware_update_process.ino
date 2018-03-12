@@ -130,7 +130,7 @@ void handleDownlink(String response)
 {
   char opcode = response.charAt(0);
   String dlSeqNum = response.substring(1,5);
-  String data = response.substring(8);
+  String data = response.substring(4);
   Serial.print(F("Response Opcode: "));
   Serial.println(opcode);
 
