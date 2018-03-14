@@ -26,10 +26,29 @@
 #include <maiRN2xx3.h>
 #include <SoftwareSerial.h>
 #include "networkDetails.h"
+#include <stdlib.h> 
 
 SoftwareSerial mySerial(10, 11); // RX, TX
 const int buttonPin = 2;     // the number of the pushbutton pin
 int seqNum = 1;
+
+char currentFW[] = "010506";
+String updateFWVersion;
+String updateSize;
+
+bool updateIndices[100];
+int numOfUpdatePackets;
+String updateCRC;
+
+
+////////////////////////////////////////////////////////
+/////////////     Simulate LoRa RX         /////////////
+////////////////////////////////////////////////////////
+const byte numChars = 100;
+char receivedChars[numChars];
+boolean newData = false;
+////////////////////////////////////////////////////////
+
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
@@ -55,8 +74,9 @@ void setup()
 void loop()
 {
     stateMachine();
-    
-    countDown(60000, "Updating state in ...");
+
+    countDown(20000, "Updating state in ...");
+//    recvWithStartEndMarkers();
 }
 
 ////////////////////////////////////////////////////////
@@ -81,12 +101,13 @@ void stateMachine()
     case 2:
     {
       Serial.println(F("[STATE: 2] REQ FW UPDATE PACKET"));     
-      requestFirmwareUpdatePacket();      
+      requestFirmwareUpdatePacket("");      
       break;
     }
     case 3:
     {
       Serial.println(F("[STATE: 3] REQ MISSING PACKETS"));  
+      recoverMissingPackets();
       break;    
     }
     case 4:
@@ -103,25 +124,66 @@ void stateMachine()
 
 void transmitNodeStatus()
 {
-  transmitMessage("3", "0105061e22", false);  // v1.5.6 is out-of-date
+  transmitMessage("3", "01050622", false);  // v1.5.6 is out-of-date
+}
+
+void handleNotification(String packet)
+{
+
+  updateFWVersion = packet.substring(0,6);
+  updateSize = packet.substring(6,10);
+  numOfUpdatePackets = hexStringtoInt(packet.substring(10,14));
+  updateCRC = packet.substring(14,22);
+  Serial.println("New Firmware Available: " + updateFWVersion);
+  Serial.println("New Firmware Size: " + updateSize);
+  Serial.println("Num of packets: " + String(numOfUpdatePackets));
+  Serial.println("Update CRC: " + updateCRC);
 }
 
 ////////////////////////////////////////////////////////
 /////////////     FW UPDATE FUNCTIONS      /////////////
 ////////////////////////////////////////////////////////
 
-void requestFirmwareUpdatePacket(){  
-  transmitMessage("4", "", true);  
+void requestFirmwareUpdatePacket(String missingPackets){  
+  transmitMessage("4", missingPackets, true);  
 }
 
 char handleUpdatePacket(String packet) 
 {
-  String index = packet.substring(1,4);
+  int index = hexStringtoInt(packet.substring(1,4));
   Serial.print(F("PROCESSING FW PACKET: [INDEX:"));
-  Serial.print(index);
-  Serial.print(F("]"));
+  Serial.print(String(index));  
+  Serial.println(F("]"));
+  updateIndices[index] = true;
 
   return packet.charAt(0);;
+}
+
+void recoverMissingPackets()
+{
+  String missingPackets = "";
+  bool packetsMissing = false;
+  
+  for (int i = 1; i <= numOfUpdatePackets; i++)
+  {
+    if (updateIndices[i] == false)
+    {
+      packetsMissing = true;
+      missingPackets += padWithZeros(String(i, HEX), 4);
+    }
+  }
+  if (packetsMissing)
+  {
+    requestFirmwareUpdatePacket(missingPackets);      
+  }
+  else
+  {
+    Serial.print(F("[CHANGE STATE: "));
+    Serial.print(String(state) + "------>");
+    state = 4;    
+    Serial.println(String(state)+"]");    
+  }
+  
 }
 
 ////////////////////////////////////////////////////////
@@ -165,6 +227,7 @@ void handleDownlink(String response)
       Serial.print(String(state) + "------>");
       state = 2; //Move to Request FW Update Packets State.
       Serial.println(String(state)+"]");
+      handleNotification(data);      
       break;
     }
     case '5':
@@ -219,6 +282,9 @@ void transmitMessage(String opcode, String data, bool ack)
   Serial.print(seqNum);
   Serial.print(F("][DATA:"));
   Serial.println(data + "]");
+  Serial.print(F("TX: "));
+  Serial.println(payload);
+
   
   TX_RETURN_TYPE res = myLora.txCommand(command, payload, false);
   logRN2483Response();
@@ -257,6 +323,17 @@ void transmitMessage(String opcode, String data, bool ack)
         Serial.println(F("Unknown response from TX function"));
       }
     }
+    
+
+    ////////////////////////////////////////////////////////
+    /////////////     Simulate LoRa RX         /////////////
+    ////////////////////////////////////////////////////////
+//    incrementSeqNum();
+//    handleSerialInput();
+    
+    ////////////////////////////////////////////////////////
+
+ 
 }
 
 ////////////////////////////////////////////////////////
@@ -273,6 +350,13 @@ void countDown(unsigned long t, String m){
     delay(10000);
   }
   Serial.println();
+}
+
+int hexStringtoInt(String s)
+{
+  String workingString = s;
+  long A = strtol(workingString.c_str(),NULL,16);
+  return String(A).toInt();  
 }
 
 void incrementSeqNum()
@@ -343,7 +427,8 @@ void initialize_radio()
 
   int i = 1;
   Serial.println("Join Attempt: " + String(i));
- 
+
+  Serial.println(network.getAppEUI() + "-" + network.getAppKey());
   join_result = myLora.initOTAA(network.getAppEUI(), network.getAppKey());
 
   while(!join_result)
@@ -360,4 +445,53 @@ void initialize_radio()
   delay(5000);
 
 }
+
+
+////////////////////////////////////////////////////////
+/////////////     Simulate LoRa RX         /////////////
+////////////////////////////////////////////////////////
+
+void recvWithStartEndMarkers() {
+    static boolean recvInProgress = false;
+    static byte ndx = 0;
+    char startMarker = '<';
+    char endMarker = '>';
+    char rc;
+ 
+ // if (Serial.available() > 0) {
+    while (Serial.available() > 0 && newData == false) {
+        rc = Serial.read();
+
+        if (recvInProgress == true) {
+            if (rc != endMarker) {
+                receivedChars[ndx] = rc;
+                ndx++;
+                if (ndx >= numChars) {
+                    ndx = numChars - 1;
+                }
+            }
+            else {
+                receivedChars[ndx] = '\0'; // terminate the string
+                recvInProgress = false;
+                ndx = 0;
+                newData = true;
+            }
+        }
+
+        else if (rc == startMarker) {
+            recvInProgress = true;
+        }
+    }
+}
+
+void handleSerialInput() {
+    if (newData == true) {
+        Serial.print("This just in ... ");
+        Serial.println(receivedChars);
+        handleDownlink(receivedChars);
+        newData = false;
+    }
+}
+////////////////////////////////////////////////////////
+
 
