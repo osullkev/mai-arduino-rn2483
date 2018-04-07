@@ -1,4 +1,4 @@
-/*
+  /*
  * CHECK THE RULES BEFORE USING THIS PROGRAM!
  *
  * CHANGE ADDRESS!
@@ -61,7 +61,8 @@ void setup()
   Serial.println(F("This test only sends uplink of opcode=3,4,5,6, i.e uplinks involved in the FW update process."));
   Serial.println(F("-------------------------------------------------"));
 
-  initialize_radio();
+
+//  initialize_radio();
   
   delay(2000);
 }
@@ -75,7 +76,7 @@ void loop()
     ////////////////////////////////////////////////////////
     /////////////     Simulate LoRa RX         /////////////
     ////////////////////////////////////////////////////////
-    //    recvWithStartEndMarkers();
+        recvWithStartEndMarkers();
     ////////////////////////////////////////////////////////
 }
 
@@ -126,7 +127,7 @@ void stateMachine()
 
 void transmitNodeStatus()
 {
-  transmitMessage("3", "01050622", false);  // v1.5.6 is out-of-date
+  transmitMessage("3", "1", "01050622", false);  // v1.5.6 is out-of-date
 }
 
 void handleNotification(String packet)
@@ -140,22 +141,19 @@ void handleNotification(String packet)
 /////////////     FW UPDATE FUNCTIONS      /////////////
 ////////////////////////////////////////////////////////
 
-//void requestFirmwareUpdatePacket(String missingPackets){   
 void requestFirmwareUpdatePacket(){   
-  //transmitMessage("4", missingPackets, true);  
-  transmitMessage("4", lastIndexReceived, true);  
+  transmitMessage("0", "2", lastIndexReceived, true);  
 }
 
-//char handleUpdatePacket(String packet) 
-char handleUpdatePacket()
+void handleUpdatePacket()
 {
-  lastIndexReceived = padWithZeros(myLora.getRx().substring(5,8), 4);
-  int index = hexStringtoInt(myLora.getRx().substring(5,8));
+  lastIndexReceived = myLora.getRx().substring(4,6);
+  int index = hexStringtoInt(lastIndexReceived);
   Serial.print(F("PROCESSING FW PACKET: [INDEX:"));
   Serial.print(String(index) + "]");  
   updateIndices[index] = true;
 
-  return myLora.getRx().charAt(4);
+//  return myLora.getRx().charAt(4);
 }
 
 void recoverMissingPackets()
@@ -194,86 +192,165 @@ void recoverMissingPackets()
 //void handleDownlink(String response)
 void handleDownlink()
 {
+  char port = myLora.getRxPort();
   char opcode = myLora.getRx().charAt(0);
   String dlSeqNum = myLora.getRx().substring(1,4);
-//  String data = response.substring(4);
   Serial.print(F("RX: "));
-  Serial.print(F("[OPCODE:"));
+  Serial.print(F("[PORT:"));
+  Serial.print(port);
+  Serial.print(F("][OPCODE:"));
   Serial.print(opcode);
   Serial.print(F("][SEQNUM:"));
   Serial.print(dlSeqNum + "]");
-//  Serial.print(F("][DATA:"));
-//  Serial.println(data + "]");
 
-  switch(opcode)
+  switch(port)
   {
-    case '2':
+    case '1':
     {
-      Serial.print(F("[CHANGE STATE: "));
-      Serial.print(String(state) + "------>");
-      state = 0; //Move back to idle state
-      Serial.println(String(state)+"]");
-      break;
-    }
-    case '3':
-    {
-      Serial.print(F("[CHANGE STATE: "));
-      Serial.print(String(state) + "------>");
-      state = 0; //Move back to idle state
-      Serial.println(String(state)+"]");
-      break;
-    }
-    case '4':
-    {
-      Serial.print(F("[CHANGE STATE: "));
-      Serial.print(String(state) + "------>");
-      state = 2; //Move to Request FW Update Packets State.
-      Serial.println(String(state)+"]");
-      handleNotification(myLora.getRx().substring(4));      
-      break;
-    }
-    case '5':
-    {
-      char flag = handleUpdatePacket();
-      switch (flag)
+      switch(opcode)
       {
         case '0':
         {
-          Serial.println(F("[MORE PACKETS AVAILABLE]"));
-          state = 2;      
+          Serial.print(F("[CHANGE STATE: "));
+          Serial.print(String(state) + "------>");
+          state = 0; //Move back to idle state
+          Serial.println(String(state)+"]");
           break;
         }
         case '1':
         {
           Serial.print(F("[CHANGE STATE: "));
           Serial.print(String(state) + "------>");
-          state = 3;      
+          state = 0; //Move back to idle state
           Serial.println(String(state)+"]");
-          break;  
+          break;
+        }
+        default:
+        {
+          Serial.println(F("Unknown opcode on port 1"));       
+          break; 
+        }
+      }
+      break;
+    }
+    case '2':
+    {
+      switch(opcode)
+      {
+        case '0':
+        {
+          Serial.print(F("[CHANGE STATE: "));
+          Serial.print(String(state) + "------>");
+          state = 2; //Move to Request FW Update Packets State.
+          Serial.println(String(state)+"]");
+          handleNotification(myLora.getRx().substring(4));      
+          break;          
+        }
+        case '1':
+        {
+          handleUpdatePacket();
+          Serial.println(F("[MORE PACKETS AVAILABLE]"));
+          state = 2;      
+          break;          
         }
         case '2':
         {
-          Serial.println("Pausing FW Update process");
-          break;
-        }    
-        case '3':
-        {
-          Serial.println("All packets sent");
+          handleUpdatePacket();
           Serial.print(F("[CHANGE STATE: "));
           Serial.print(String(state) + "------>");
           state = 3;      
           Serial.println(String(state)+"]");
-          break;
-        }  
+          break; 
+        }
+        case '3':
+        {
+          Serial.println(F("EXECUTE FIRMWARE UPDATE"));
+          Serial.print(F("[CHANGE STATE: "));
+          Serial.print(String(state) + "------>");
+          state = 3;      
+          Serial.println(String(state)+"]");
+          break; 
+        }        
       }
       break;
     }
     default:
     {
-      Serial.print(F("Unknown opcode received: "));
-      Serial.println(opcode);
-    }
-  }  
+      Serial.print(F("Unknown port: "));
+      Serial.println(port);
+    }   
+    
+  }
+
+//  switch(opcode)
+//  {
+//    case '2':
+//    {
+//      Serial.print(F("[CHANGE STATE: "));
+//      Serial.print(String(state) + "------>");
+//      state = 0; //Move back to idle state
+//      Serial.println(String(state)+"]");
+//      break;
+//    }
+//    case '3':
+//    {
+//      Serial.print(F("[CHANGE STATE: "));
+//      Serial.print(String(state) + "------>");
+//      state = 0; //Move back to idle state
+//      Serial.println(String(state)+"]");
+//      break;
+//    }
+//    case '4':
+//    {
+//      Serial.print(F("[CHANGE STATE: "));
+//      Serial.print(String(state) + "------>");
+//      state = 2; //Move to Request FW Update Packets State.
+//      Serial.println(String(state)+"]");
+//      handleNotification(myLora.getRx().substring(4));      
+//      break;
+//    }
+//    case '5':
+//    {
+//      char flag = handleUpdatePacket();
+//      switch (flag)
+//      {
+//        case '0':
+//        {
+//          Serial.println(F("[MORE PACKETS AVAILABLE]"));
+//          state = 2;      
+//          break;
+//        }
+//        case '1':
+//        {
+//          Serial.print(F("[CHANGE STATE: "));
+//          Serial.print(String(state) + "------>");
+//          state = 3;      
+//          Serial.println(String(state)+"]");
+//          break;  
+//        }
+//        case '2':
+//        {
+//          Serial.println("Pausing FW Update process");
+//          break;
+//        }    
+//        case '3':
+//        {
+//          Serial.println("All packets sent");
+//          Serial.print(F("[CHANGE STATE: "));
+//          Serial.print(String(state) + "------>");
+//          state = 3;      
+//          Serial.println(String(state)+"]");
+//          break;
+//        }  
+//      }
+//      break;
+//    }
+//    default:
+//    {
+//      Serial.print(F("Unknown opcode received: "));
+//      Serial.println(opcode);
+//    }
+//  }  
 }
 
 
@@ -281,14 +358,16 @@ void handleDownlink()
 /////////////     UPLINK ASSEMBLERS        /////////////
 ////////////////////////////////////////////////////////
 
-void transmitMessage(String opcode, String data, bool ack)
+void transmitMessage(String opcode, String port, String data, bool ack)
 {
   String seqNum = getNextSeqNum();
   String payload = opcode + seqNum + data;
 //  String command = ack ? "mac tx cnf 1 " : "mac tx uncnf 1 ";
-  String command = "mac tx uncnf 1 ";
+  String command = "mac tx uncnf " + port + " ";
   Serial.print(F("TX: "));
-  Serial.print(F("[OPCODE:"));
+  Serial.print(F("[PORT:"));
+  Serial.print(port);
+  Serial.print(F("][OPCODE:"));
   Serial.print(opcode);
   Serial.print(F("][SEQNUM:"));
   Serial.print(seqNum);
@@ -344,8 +423,8 @@ void transmitMessage(String opcode, String data, bool ack)
     ////////////////////////////////////////////////////////
     /////////////     Simulate LoRa RX         /////////////
     ////////////////////////////////////////////////////////
-    //incrementSeqNum();
-    //handleSerialInput();
+    incrementSeqNum();
+    handleSerialInput();
     
     ////////////////////////////////////////////////////////
 
