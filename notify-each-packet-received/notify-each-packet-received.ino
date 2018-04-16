@@ -1,4 +1,4 @@
-  /*
+/*
  * CHECK THE RULES BEFORE USING THIS PROGRAM!
  *
  * CHANGE ADDRESS!
@@ -32,9 +32,12 @@ SoftwareSerial mySerial(10, 11); // RX, TX
 const int buttonPin = 2;     // the number of the pushbutton pin
 int seqNum = 1;
 
-bool updateIndices[100];
+int channelViolations = 0;
+
 int numOfUpdatePackets;
 String lastIndexReceived = "";
+
+int interval = 2000;
 
 ////////////////////////////////////////////////////////
 /////////////     Simulate LoRa RX         /////////////
@@ -43,7 +46,6 @@ const byte numChars = 100;
 char receivedChars[numChars];
 boolean newData = false;
 ////////////////////////////////////////////////////////
-
 
 //create an instance of the rn2xx3 library,
 //giving the software serial as port to use
@@ -62,7 +64,7 @@ void setup()
   Serial.println(F("-------------------------------------------------"));
 
 
-//  initialize_radio();
+  initialize_radio();
   
   delay(2000);
 }
@@ -71,12 +73,13 @@ void loop()
 {
     stateMachine();
 
-    countDown(20000, "Updating state in ...");
+//    countDown(20000, "Updating state in ...");
+    delay(interval);
 
     ////////////////////////////////////////////////////////
     /////////////     Simulate LoRa RX         /////////////
     ////////////////////////////////////////////////////////
-        recvWithStartEndMarkers();
+//        recvWithStartEndMarkers();
     ////////////////////////////////////////////////////////
 }
 
@@ -107,14 +110,14 @@ void stateMachine()
     }
     case 3:
     {
-      Serial.println(F("[STATE: 3] REQ MISSING PACKETS"));  
-      recoverMissingPackets();
-      break;    
+      Serial.println(F("[STATE: 3] COMPLETE UPDATE RECEIVED"));  
+      delay(3000);
+      exit(0);
+      break;
     }
     case 4:
     {
       Serial.println(F("[STATE: 4] COMPLETE UPDATE RECEIVED"));
-      delay(3000);
       exit(0);
       break;
     }
@@ -132,8 +135,8 @@ void transmitNodeStatus()
 
 void handleNotification(String packet)
 {
-
-  numOfUpdatePackets = hexStringtoInt(packet.substring(10,14));
+  Serial.println(packet);
+  numOfUpdatePackets = hexStringtoInt(packet.substring(10,12));
   Serial.println("Num of packets: " + String(numOfUpdatePackets));
 }
 
@@ -151,57 +154,26 @@ void handleUpdatePacket()
   int index = hexStringtoInt(lastIndexReceived);
   Serial.print(F("PROCESSING FW PACKET: [INDEX:"));
   Serial.print(String(index) + "]");  
-  updateIndices[index] = true;
-
-//  return myLora.getRx().charAt(4);
-}
-
-void recoverMissingPackets()
-{
-  String missingPackets = "";
-  bool packetsMissing = false;
-  
-  for (int i = 1; i <= numOfUpdatePackets; i++)
-  {
-    if (updateIndices[i] == false)
-    {
-      packetsMissing = true;
-      missingPackets += padWithZeros(String(i, HEX), 4);
-    }
-  }
-  if (packetsMissing)
-  {
-    lastIndexReceived = packetsMissing;
-    requestFirmwareUpdatePacket(); 
-    //requestFirmwareUpdatePacket(missingPackets);      
-  }
-  else
-  {
-    Serial.print(F("[CHANGE STATE: "));
-    Serial.print(String(state) + "------>");
-    state = 4;    
-    Serial.println(String(state)+"]");    
-  }
-  
 }
 
 ////////////////////////////////////////////////////////
 /////////////     DOWNLINK HANDLER         /////////////
 ////////////////////////////////////////////////////////
 
-//void handleDownlink(String response)
 void handleDownlink()
 {
   char port = myLora.getRxPort();
   char opcode = myLora.getRx().charAt(0);
-  String dlSeqNum = myLora.getRx().substring(1,4);
+  String dlSeqNum = myLora.getRx().substring(1,4);  
+  
+  Serial.println("->");
   Serial.print(F("RX: "));
   Serial.print(F("[PORT:"));
   Serial.print(port);
   Serial.print(F("][OPCODE:"));
   Serial.print(opcode);
   Serial.print(F("][SEQNUM:"));
-  Serial.print(dlSeqNum + "]");
+  Serial.println(dlSeqNum + "]");
 
   switch(port)
   {
@@ -278,79 +250,8 @@ void handleDownlink()
     {
       Serial.print(F("Unknown port: "));
       Serial.println(port);
-    }   
-    
+    }       
   }
-
-//  switch(opcode)
-//  {
-//    case '2':
-//    {
-//      Serial.print(F("[CHANGE STATE: "));
-//      Serial.print(String(state) + "------>");
-//      state = 0; //Move back to idle state
-//      Serial.println(String(state)+"]");
-//      break;
-//    }
-//    case '3':
-//    {
-//      Serial.print(F("[CHANGE STATE: "));
-//      Serial.print(String(state) + "------>");
-//      state = 0; //Move back to idle state
-//      Serial.println(String(state)+"]");
-//      break;
-//    }
-//    case '4':
-//    {
-//      Serial.print(F("[CHANGE STATE: "));
-//      Serial.print(String(state) + "------>");
-//      state = 2; //Move to Request FW Update Packets State.
-//      Serial.println(String(state)+"]");
-//      handleNotification(myLora.getRx().substring(4));      
-//      break;
-//    }
-//    case '5':
-//    {
-//      char flag = handleUpdatePacket();
-//      switch (flag)
-//      {
-//        case '0':
-//        {
-//          Serial.println(F("[MORE PACKETS AVAILABLE]"));
-//          state = 2;      
-//          break;
-//        }
-//        case '1':
-//        {
-//          Serial.print(F("[CHANGE STATE: "));
-//          Serial.print(String(state) + "------>");
-//          state = 3;      
-//          Serial.println(String(state)+"]");
-//          break;  
-//        }
-//        case '2':
-//        {
-//          Serial.println("Pausing FW Update process");
-//          break;
-//        }    
-//        case '3':
-//        {
-//          Serial.println("All packets sent");
-//          Serial.print(F("[CHANGE STATE: "));
-//          Serial.print(String(state) + "------>");
-//          state = 3;      
-//          Serial.println(String(state)+"]");
-//          break;
-//        }  
-//      }
-//      break;
-//    }
-//    default:
-//    {
-//      Serial.print(F("Unknown opcode received: "));
-//      Serial.println(opcode);
-//    }
-//  }  
 }
 
 
@@ -377,58 +278,94 @@ void transmitMessage(String opcode, String port, String data, bool ack)
   Serial.println(payload);
 
   
-  TX_RETURN_TYPE res = myLora.txCommand(command, payload, false);
+//  TX_RETURN_TYPE res = myLora.txCommand(command, payload, false);
+
+//  channelViolations = 0;
+  txMessage(command, payload);
+  Serial.println("------------------------------------------------");
+//  delay(1000);
+
 //  logRN2483Response();
+  
+  
+
+    ////////////////////////////////////////////////////////
+    /////////////     Simulate LoRa RX         /////////////
+    ////////////////////////////////////////////////////////
+//    incrementSeqNum();
+//    handleSerialInput();
+    
+    ////////////////////////////////////////////////////////
+
+ 
+}
+
+
+
+void txMessage(String command, String payload)
+{
+
+  TX_RETURN_TYPE res = myLora.txCommand(command, payload, false);
   
   switch(res) //blocking function
     {
       case TX_FAIL:
       {
-        logRN2483Response();
+//        logRN2483Response();
+        Serial.println("UNSuccessful uplink OR No Acknowledgement");
+        channelViolations = 0;
         break;
       }
       case TX_SUCCESS:
       {
-        logRN2483Response();
+//        logRN2483Response();
+        Serial.println("Successful uplink, no response");
+        channelViolations = 0;
         incrementSeqNum();
         break;
       }
       case TX_WITH_RX:
       {
-        Serial.println(F("Message received..."));
+//        Serial.println(F("Message received..."));
         handleDownlink();
+        channelViolations = 0;
         incrementSeqNum();
         break;
       }
       case TX_MAC_ERR:
       {
         Serial.println(F("MAC_ERR: Problem receiving downlink. Uplink may have been successful."));
+        channelViolations = 0;
         incrementSeqNum();
         break;
       }
       case TX_NOT_JOINED:
       {
         Serial.println(F("Not Joined ..."));
+        channelViolations = 0;
+        break;
+      }
+      case TX_NO_CHANNEL:
+      { 
+        
+        Serial.print(F("No Channel - Attempt # "));
+        Serial.print(String(channelViolations) + ";");
+        Serial.println("(Wait " + String(interval) + " ms)");
+        channelViolations++;
+        Serial.flush();
+//        delay(interval);
+//        txMessage(command, payload);
         break;
       }
       default:
       {
         Serial.println(F("Unknown response from TX function"));
+        channelViolations = 0;
         logRN2483Response();
         break;
       }
-    }
-    
-
-    ////////////////////////////////////////////////////////
-    /////////////     Simulate LoRa RX         /////////////
-    ////////////////////////////////////////////////////////
-    incrementSeqNum();
-    handleSerialInput();
-    
-    ////////////////////////////////////////////////////////
-
- 
+    }  
+//    Serial.println();
 }
 
 ////////////////////////////////////////////////////////
